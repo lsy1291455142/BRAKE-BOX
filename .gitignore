@@ -1,0 +1,6 @@
+# macOS 元数据（AppleDouble 资源分叉，会污染仓库与发布产物）
+._*
+.DS_Store
+
+# 本地发布暂存目录
+_site/

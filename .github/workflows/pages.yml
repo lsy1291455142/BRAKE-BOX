@@ -1,0 +1,76 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# GITHUB_TOKEN 的最小权限：读取仓库 + 发布 Pages
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 同一时间只跑一个发布任务，但不打断正在进行的发布
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build site
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Assemble static site
+        run: |
+          set -euo pipefail
+          rm -rf _site
+          mkdir -p _site
+          # 只发布 src/ 下的静态资源，过滤 macOS 的 ._* 与 .DS_Store
+          rsync -a --exclude '._*' --exclude '.DS_Store' src/ _site/
+          touch _site/.nojekyll
+
+      - name: Verify local asset references
+        run: |
+          set -euo pipefail
+          cd _site
+          # 抽取 index.html 中所有相对路径的 src/href，逐个确认文件存在
+          refs=$(grep -oE '(src|href)="[^"#?:]+"' index.html \
+                 | sed -E 's/^(src|href)="//; s/"$//' \
+                 | grep -vE '^(https?:|//|mailto:)' || true)
+          missing=0
+          for ref in $refs; do
+            if [ ! -e "$ref" ]; then
+              echo "::error file=src/index.html::找不到被引用的资源 $ref"
+              missing=1
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then
+            echo "存在缺失资源，停止发布。"
+            exit 1
+          fi
+          echo "资源检查通过："
+          echo "$refs"
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    name: Deploy to Pages
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4
