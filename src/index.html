@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>乘用车制动系统开发工具箱</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div id="app">
+  <aside id="sidebar">
+    <div class="brand">
+      <div class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 32 32"><circle cx="16" cy="16" r="13" fill="none" stroke="currentColor" stroke-width="2.2"/><circle cx="16" cy="16" r="5.2" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="M16 3v6M16 23v6M3 16h6M23 16h6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>
+      </div>
+      <div class="brand-text"><strong>BRAKE LAB</strong><span>乘用车制动开发工具箱</span></div>
+    </div>
+    <nav id="nav" aria-label="模块导航"></nav>
+    <div class="side-foot">
+      <div class="side-veh" id="sideVehicle"></div>
+      <div class="side-version">v2.3 · GB 21670-2025 · 非认证</div>
+    </div>
+  </aside>
+
+  <main id="main">
+    <header id="topbar">
+      <button class="icon-btn menu-btn" id="menuBtn" aria-label="展开导航">
+        <svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+      </button>
+      <div class="crumb">
+        <span id="groupName">工作台</span>
+        <h1 id="pageTitle">制动系统开发工具箱</h1>
+      </div>
+      <div class="top-actions">
+        <button class="btn ghost beginner-btn" id="beginnerBtn" title="显示 / 隐藏每个模型的原理图">
+          <svg viewBox="0 0 24 24"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H11v17H6.5A2.5 2.5 0 0 0 4 22.5zM20 5.5A2.5 2.5 0 0 0 17.5 3H13v17h4.5a2.5 2.5 0 0 1 2.5 2.5z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+          <span>原理图</span>
+        </button>
+        <button class="btn ghost vehicle-btn" id="vehicleBtn" title="编辑项目整车与制动系统参数">
+          <svg viewBox="0 0 24 24"><path d="M4 15l1.6-4.6A3 3 0 018.4 8h7.2a3 3 0 012.8 2.4L20 15M4 15h16v4H4z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><circle cx="7.5" cy="17.5" r="1.4" fill="currentColor"/><circle cx="16.5" cy="17.5" r="1.4" fill="currentColor"/></svg>
+          <span id="vehLabel">整车参数</span>
+        </button>
+        <button class="btn ghost" id="openBtn" title="打开项目文件">打开</button>
+        <button class="btn" id="saveBtn" title="保存项目为 JSON">保存项目</button>
+        <button class="btn ghost" id="printBtn" title="打印当前模块 / 导出 PDF">打印</button>
+        <input type="file" id="fileInput" accept=".json,application/json" hidden>
+      </div>
+    </header>
+    <div id="content"></div>
+  </main>
+</div>
+
+<div class="modal" id="vehicleModal" aria-hidden="true">
+  <div class="modal-card">
+    <div class="modal-head">
+      <div>
+        <span class="eyebrow">PROJECT VEHICLE</span>
+        <h2>整车与制动系统参数</h2>
+      </div>
+      <button class="icon-btn" id="modalClose" aria-label="关闭">✕</button>
+    </div>
+    <div class="modal-body" id="vehicleBody"></div>
+    <div class="modal-foot">
+      <span class="modal-hint">参数将同步到所有计算模块，并自动保存在本机浏览器中。</span>
+      <div class="modal-actions">
+        <button class="btn ghost" id="vehicleCancel">取消</button>
+        <button class="btn" id="vehicleApply">应用参数</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script src="js/util.js"></script>
+<script src="js/model.js"></script>
+<script src="js/diagrams.js"></script>
+<script src="js/standards.js"></script>
+<script src="js/symbols.js"></script>
+<script src="js/conditions.js"></script>
+<script src="js/vehicle.js"></script>
+<script src="js/modules/dynamics.js"></script>
+<script src="js/modules/distribution.js"></script>
+<script src="js/modules/distance.js"></script>
+<script src="js/modules/torque.js"></script>
+<script src="js/modules/pedal.js"></script>
+<script src="js/modules/thermal.js"></script>
+<script src="js/modules/friction.js"></script>
+<script src="js/modules/parking.js"></script>
+<script src="js/modules/matching.js"></script>
+<script src="js/modules/analysis.js"></script>
+<script src="js/modules/sensitivity.js"></script>
+<script src="js/modules/conditions.js"></script>
+<script src="js/modules/symbols.js"></script>
+<script src="js/modules/standards.js"></script>
+<script src="js/modules/reference.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

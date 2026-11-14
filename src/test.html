@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><title>Brake Lab self test</title></head>
+<body>
+<div id="toast"></div>
+<div id="vehicleModal"></div>
+<div id="content"></div>
+<pre id="result">PENDING</pre>
+<script>
+window.__errors = [];
+window.addEventListener('error', function (e) {
+  window.__errors.push((e.message || '') + ' @ ' + (e.filename || '') + ':' + (e.lineno || 0));
+});
+</script>
+<script src="js/util.js"></script>
+<script src="js/model.js"></script>
+<script src="js/diagrams.js"></script>
+<script src="js/standards.js"></script>
+<script src="js/symbols.js"></script>
+<script src="js/conditions.js"></script>
+<script src="js/vehicle.js"></script>
+<script src="js/modules/dynamics.js"></script>
+<script src="js/modules/distribution.js"></script>
+<script src="js/modules/distance.js"></script>
+<script src="js/modules/torque.js"></script>
+<script src="js/modules/pedal.js"></script>
+<script src="js/modules/thermal.js"></script>
+<script src="js/modules/friction.js"></script>
+<script src="js/modules/parking.js"></script>
+<script src="js/modules/matching.js"></script>
+<script src="js/modules/analysis.js"></script>
+<script src="js/modules/sensitivity.js"></script>
+<script src="js/modules/conditions.js"></script>
+<script src="js/modules/symbols.js"></script>
+<script src="js/modules/standards.js"></script>
+<script src="js/modules/reference.js"></script>
+<script>
+(function () {
+  const results = [];
+  function check(name, cond, detail) {
+    results.push({ name: name, ok: !!cond, detail: detail === undefined ? '' : String(detail) });
+  }
+  function approx(name, actual, expected, tol) {
+    check(name, Math.abs(actual - expected) <= tol, 'actual=' + actual + ' expected=' + expected + ' tol=' + tol);
+  }
+  window.addEventListener('load', function () {
+    try {
+      const v = BT.vehicle;
+      const d = BT.derived(v);
+      approx('B级 beta', d.beta, 0.771, 0.004);
+      approx('B级 phi0', d.phi0, 0.936, 0.01);
+      approx('B级 0.5g pressure', BT.pressureForDecel(0.5, v), 3.57, 0.06);
+      approx('B级 0.5g pedal force', BT.pedalForceForPressure(BT.pressureForDecel(0.5, v), v), 81, 4);
+      approx('B级 0.5g travel', BT.pedalTravelAtPressure(BT.pressureForDecel(0.5, v), v), 56, 5);
+
+      const sd = BT.stoppingDistance({ v0: 100 / 3.6, tr: 0.35, tb: 0.2, a: 0.9 * BT.g });
+      approx('100km/h mu0.9 total distance', sd.total, 56.2, 0.8);
+      approx('100km/h mu0.9 braking distance', sd.braking, 46.4, 0.8);
+
+      const th = BT.thermal({ mass: 1620, v0: 100 / 3.6, beta: d.beta, discMassF: 11.5, discMassR: 8, discShare: 0.86, cp: 500 });
+      approx('front disc dT', th.dTF, 36.0, 0.8);
+
+      const util = BT.utilization(d.beta, 0.5, v);
+      approx('f_front at 0.5g', util.front, 0.559, 0.005);
+      approx('f_rear at 0.5g', util.rear, 0.367, 0.005);
+
+      // Stopping-distance segments: sum must equal braking distance, and a
+      // stop during build-up must not leave a phantom steady-state segment.
+      const seg = BT.stoppingDistance({ v0: 27.7777778, tr: 0.35, tb: 0.2, a: 8.825985 });
+      approx('distance segments sum', seg.buildDistance + seg.steadyDistance, seg.braking, 1e-9);
+      approx('distance total = reaction + braking', seg.reaction + seg.braking, seg.total, 1e-9);
+      const segShort = BT.stoppingDistance({ v0: 1, tr: 0, tb: 1, a: 20 });
+      check('stop during build flag', segShort.stoppedDuringBuild === true, String(segShort.stoppedDuringBuild));
+      approx('stop during build steady distance', segShort.steadyDistance, 0, 1e-12);
+      check('zero decel returns infinite distance', BT.stoppingDistance({ v0: 10, tr: 0, tb: 1, a: 0 }).total === Infinity, 'not infinite');
+
+      // All four sides of the f = z +/- 0.07 envelope must be checked.
+      const band = BT.utilizationBandViolation(d.beta, 0.5, v);
+      const bandManual = Math.max(util.front - 0.57, 0.43 - util.front, util.rear - 0.57, 0.43 - util.rear);
+      approx('band violation checks four sides', band, bandManual, 1e-12);
+
+      // Parking demand must scale linearly with the safety factor.
+      const pk1 = BT.parkingDemand({ grade: 20, mass: 1620, mu: 0.38, sf: 1, wheelR: 334, re: 110 });
+      const pk12 = BT.parkingDemand({ grade: 20, mass: 1620, mu: 0.38, sf: 1.2, wheelR: 334, re: 110 });
+      approx('parking safety factor linear', pk12.clamp / pk1.clamp, 1.2, 1e-9);
+
+      // Thermal split must use beta explicitly.
+      const th2 = BT.thermal({ mass: 1620, v0: 100 / 3.6, beta: 0.6, discMassF: 11.5, discMassR: 8, discShare: 0.86, cp: 500 });
+      const e2 = 0.5 * 1620 * Math.pow(100 / 3.6, 2);
+      approx('thermal front beta formula', th2.dTF, e2 * 0.6 * 0.86 / (2 * 11.5 * 500), 1e-9);
+
+      // Numeric guards and edge behavior.
+      const rc = BT.regression([[0, 2], [1, 2], [2, 2]]);
+      check('regression constant-y r2 finite', isFinite(rc.r2) && rc.r2 === 0, 'r2=' + rc.r2);
+      check('smooth keeps array length', BT.smooth([1, 2, 3, 4], 4).length === 4, 'length');
+      check('default vehicle valid', BT.isValidVehicle(BT.defaultVehicle()), 'default invalid');
+      const badV = BT.deepClone(BT.defaultVehicle()); badV.mass = 0;
+      check('invalid vehicle rejected', !BT.isValidVehicle(badV), 'zero mass accepted');
+      approx('betaForPhi0 clamps high', BT.betaForPhi0(10, v), 1, 1e-12);
+      approx('pressureForDecel zero', BT.pressureForDecel(0, v), 0, 1e-12);
+      check('axle load rear not negative', BT.axleLoads(2, v).rear >= 0, 'negative rear load');
+      check('ideal front share capped', BT.idealFrontShare(2, v) <= 1, 'share > 1');
+
+      const csv = BT.parseCSV('a,b\n1,2\n3,4');
+      check('CSV parse headers', csv.headers.join(',') === 'a,b', csv.headers.join(','));
+      check('CSV parse rows', csv.rows.length === 2 && csv.rows[1][1] === '4', JSON.stringify(csv.rows));
+
+      const reg = BT.regression([[0, 1], [1, 3], [2, 5]]);
+      approx('regression slope', reg.b, 2, 1e-9);
+      approx('regression r2', reg.r2, 1, 1e-9);
+
+      const host = document.createElement('div');
+      BT.chart(host, { xDomain: [0, 1], yDomain: [0, 1], series: [{ name: 't', data: [[0, 0], [1, 1]] }] });
+      check('chart renders svg', !!host.querySelector('svg'));
+      check('chart has accessible title', !!host.querySelector('svg title'));
+      BT.chart(host, { xDomain: [0, 1], yDomain: [0, 1], series: [{ name: 't', data: [[0, 0], [1, 1]] }], lines: [{ y: 2, label: 'out' }] });
+      check('chart clips out-of-domain reference line', host.querySelectorAll('line[stroke="#b42318"]').length === 0);
+
+      ['loadTransfer', 'idealCurve', 'distance', 'torque', 'pedal', 'thermal', 'friction', 'parking', 'matching', 'analysis', 'sensitivity', 'standards', 'conditionMap', 'fadeCycle', 'hydraulicSplit', 'regenBlend', 'symbolBoard'].forEach(function (kind) {
+        try {
+          const html = BT.diagram(kind);
+          check('diagram ' + kind, html.indexOf('<svg') > 0 && html.indexOf('</svg>') > 0, 'length ' + html.length);
+          check('interactive ' + kind, html.indexOf('data-dgm="' + kind + '"') > 0 &&
+            html.indexOf('dgm-readout') > 0 &&
+            (html.indexOf('type="range"') > 0 || html.indexOf('data-act=') > 0), 'live controls found');
+          check('formula ' + kind, html.indexOf('formula') > 0 || kind === 'standards' || kind === 'symbolBoard', 'formula line present');
+        } catch (e) {
+          check('diagram ' + kind, false, e && e.message);
+        }
+      });
+
+      try {
+        const host = document.createElement('div');
+        host.innerHTML = BT.diagram('idealCurve');
+        document.body.appendChild(host);
+        BT.mountDiagrams(host);
+        const live = host.querySelector('.dgm-live');
+        check('diagram mounts live', !!live && live.dataset.ready === '1', live ? live.dataset.ready : 'missing');
+        const slider = live && live.querySelector('input[data-k="beta"]');
+        const before = live && live.querySelector('.dgm-readout').textContent;
+        if (slider) {
+          slider.value = '0.6';
+          slider.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+        const after = live && live.querySelector('.dgm-readout').textContent;
+        check('diagram slider recomputes', !!slider && before !== after, 'before=' + before + ' after=' + after);
+        host.remove();
+      } catch (e) {
+        check('diagram live binding', false, e && e.message);
+      }
+
+      try {
+        const sv = BT.vehicle;
+        const sd = BT.stoppingDistance({ v0: 100 / 3.6, tr: 0.35, tb: 0.2, a: 0.9 * BT.g * 0.95 });
+        check('distance diagram uses model', BT.diagram('distance').indexOf(sd.total.toFixed(1) + ' m') >= 0, 'expected ' + sd.total.toFixed(1) + ' m');
+        const pPad = 7 * BT.areaCaliper(sv.front) / (sv.front.padArea * 100);
+        check('friction diagram uses p_pad formula', BT.diagram('friction').indexOf(pPad.toFixed(2) + ' MPa') >= 0, 'expected ' + pPad.toFixed(2) + ' MPa');
+        const thd = BT.thermal({ mass: sv.mass, v0: 100 / 3.6, beta: d.beta, discMassF: sv.front.discMass, discMassR: sv.rear.discMass, discShare: 0.86, cp: 500 });
+        check('thermal diagram uses dT formula', BT.diagram('thermal').indexOf(thd.dTF.toFixed(1) + ' °C') >= 0, 'expected ' + thd.dTF.toFixed(1) + ' °C');
+      } catch (e) {
+        check('diagram formula consistency', false, e && e.message);
+      }
+      check('condition library has 12 entries', BT.CONDITIONS.length === 12, 'count=' + BT.CONDITIONS.length);
+      check('symbol dictionary is populated', BT.SYMBOLS.length >= 90, 'count=' + BT.SYMBOLS.length);
+      check('draft criteria loaded', BT.DRAFT_CRITERIA.length >= 15, 'count=' + BT.DRAFT_CRITERIA.length);
+      check('draft condition map loaded', !!BT.DRAFT_BY_CONDITION.type1 && BT.DRAFT_BY_CONDITION.type1.indexOf('75%') >= 0);
+      check('mass maps to m', BT.SYMBOL_BY_KEY.mass && BT.SYMBOL_BY_KEY.mass.sym === 'm');
+      check('standards uses full symbol dictionary', BT.VARIABLES === BT.SYMBOLS);
+      BT.modules.forEach(function (m) {
+        const root = document.createElement('div');
+        try {
+          m.render(root);
+          check('render ' + m.name, root.textContent.length > 300, 'text length ' + root.textContent.length);
+          const hasDiagram = m.id === 'reference' || !!root.querySelector('svg.diagram');
+          check('svg in ' + m.name, hasDiagram, hasDiagram ? 'diagram found' : 'diagram missing');
+        } catch (e) {
+          check('render ' + m.name, false, (e && e.message ? e.message : e) + ' @ ' + (e && e.stack ? String(e.stack).split('\n')[1] : ''));
+        }
+      });
+    } catch (e) {
+      check('suite crashed', false, (e && e.message) + ' @ ' + (e && e.stack));
+    }
+    const failed = results.filter(function (r) { return !r.ok; });
+    const text = (failed.length ? 'FAIL ' + failed.length + ' / ' : 'PASS ') + results.length + '\n' +
+      (window.__errors && window.__errors.length ? 'SCRIPT ERRORS:\n' + window.__errors.join('\n') + '\n' : '') +
+      results.map(function (r) { return (r.ok ? 'PASS' : 'FAIL') + ' | ' + r.name + ' | ' + r.detail; }).join('\n');
+    document.getElementById('result').textContent = text;
+    document.title = failed.length ? 'FAIL' : 'PASS';
+  });
+})();
+</script>
+</body>
+</html>
